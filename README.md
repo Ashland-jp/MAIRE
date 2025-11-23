@@ -1,5 +1,5 @@
 # MAIRE – Multi-Anchor Immutable Reasoning Engine
-Pronunciation: “Mary” • Stable: v1.0 
+Pronunciation: “Mary” • Closed: v1.0 
 
 ## Core Philosophy 
 - Every LLM response is appended to prompt header — 100 % immutable audit trail
