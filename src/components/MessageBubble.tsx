@@ -42,26 +42,30 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             </button>
 
             {isStackExpanded && (
-              <div className="mt-2 space-y-2 p-4 rounded-lg bg-gray-800/20 border border-gray-700/50">
-                {message.headerStack.map((layer, index) => (
-                  <div
-                    key={index}
-                    className="p-3 rounded-lg bg-gray-900/40 border border-gray-700/30"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
-                      <span className="text-xs text-gray-400">
-                        Layer {index + 1}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-700/50 text-gray-300">
-                        {layer.model}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
-                      {layer.response}
-                    </p>
-                  </div>
-                ))}
+              <div className="mt-2 space-y-3 p-4 rounded-lg bg-gray-800/20 border border-gray-700/50">
+  {message.headerStack.map((layer, index) => (
+    <div
+      key={index}
+      className="rounded-xl bg-gray-900/60 border border-gray-700/50 overflow-hidden shadow-md"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-gray-800/70 border-b border-gray-700/50">
+        <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse" />
+        <span className="text-sm font-semibold text-gray-200">
+          Layer {index + 1}
+        </span>
+        <span className="text-sm font-mono px-3 py-1 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+          {layer.model}
+        </span>
+      </div>
+
+      {/* Full scrollable response – no more cutting off */}
+      <div className="max-h-96 overflow-y-auto p-4 font-mono text-sm leading-relaxed text-gray-200 whitespace-pre-wrap bg-black/30">
+        {layer.response || "thinking..."}
+      </div>
+    </div>
+  ))}
+
                 
                 <div className="pt-2 border-t border-gray-700/30">
                   <p className="text-xs text-gray-500 italic">
