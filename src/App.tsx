@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from "react";
 import { ChatInterface } from './components/ChatInterface';
 import { ConfigPanel } from './components/ConfigPanel';
 import { Header } from './components/Header';
 
 export type Topology = 'standard-chain' | 'double-helix' | 'star-topology';
 
-export interface LLMModel {
+export interface AvailableModel {
   id: string;
   name: string;
+}
+
+export interface ModelSlot {
+  id: string;
+  selectedModelId: string;
   enabled: boolean;
 }
 
@@ -23,95 +28,113 @@ export interface Message {
 }
 
 export default function App() {
-  const [topology, setTopology] = useState<Topology>('standard-chain');
-  const [models, setModels] = useState<LLMModel[]>([
-    { id: 'grok', name: 'Grok', enabled: true },
-    { id: 'claude', name: 'Claude', enabled: true },
-    { id: 'gpt-4', name: 'GPT-4', enabled: true },
-    { id: 'gemini', name: 'Gemini', enabled: false },
-    { id: 'llama', name: 'Llama', enabled: false },
-  ]);
+  const [topology, setTopology] = useState<Topology>('star-topology');
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [modelSlots, setModelSlots] = useState<ModelSlot[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConfigOpen, setIsConfigOpen] = useState(true);
 
+  // Fetch real connected models from backend
+  useEffect(() => {
+    fetch("/maire/models")
+      .then(r => r.json())
+      .then((data: AvailableModel[]) => {
+        const models = data.length > 0 ? data : [
+          { id: "grok", name: "Grok (Stub)" },
+          { id: "claude", name: "Claude (Stub)" },
+          { id: "gpt-4", name: "GPT-4 (Stub)" },
+        ];
+        setAvailableModels(models);
+      })
+      .catch(() => {
+        setAvailableModels([
+          { id: "grok", name: "Grok (Stub)" },
+          { id: "claude", name: "Claude (Stub)" },
+          { id: "gpt-4", name: "GPT-4 (Stub)" },
+        ]);
+      });
+  }, []);
+
+  // Initialize exactly 5 slots when models load
+  useEffect(() => {
+    if (availableModels.length > 0 && modelSlots.length === 0) {
+      const slots = Array.from({ length: 5 }, (_, i) => ({
+        id: `slot${i + 1}`,
+        selectedModelId: availableModels[0].id,
+        enabled: i < 3, // first 3 on by default
+      }));
+      setModelSlots(slots);
+    }
+  }, [availableModels, modelSlots.length]);
+
   const handleSendMessage = async (content: string) => {
-    const userMessage: Message = {
+    const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
       content,
       timestamp: new Date(),
     };
+    setMessages(prev => [...prev, userMsg]);
 
-    setMessages((prev) => [...prev, userMessage]);
+    const activeModelIds = modelSlots
+      .filter(s => s.enabled)
+      .map(s => s.selectedModelId);
 
-    // Prepare request for Go backend
-    const enabledModels = models.filter((m) => m.enabled).map((m) => m.id);
-    
     try {
-      // TODO: Replace with actual backend endpoint
-      const response = await fetch('/maire/run', {
+      const res = await fetch('/maire/run', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           original_prompt: content,
           topology,
-          models: enabledModels,
+          models: activeModelIds,
         }),
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      const assistantMessage: Message = {
+      const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.final_response || 'Response from MAIRE',
+        content: data.final_response || 'MAIRE complete',
         timestamp: new Date(),
         headerStack: data.header_stack,
       };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      // Mock response for development
-      const mockHeaderStack = enabledModels.map((model) => ({
-        model,
-        response: `[${model}] Analysis of: "${content}"`,
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (e) {
+      console.error(e);
+      // graceful mock fallback
+      const mockStack = activeModelIds.map(id => ({
+        model: `Model ${modelSlots.findIndex(s => s.selectedModelId === id) + 1}`,
+        response: `[${id}] ${content.slice(0, 80)}…`
       }));
-
-      const assistantMessage: Message = {
+      setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Based on ${topology} reasoning with ${enabledModels.length} models, here's the synthesized response.`,
+        content: 'Running in mock mode',
         timestamp: new Date(),
-        headerStack: mockHeaderStack,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
+        headerStack: mockStack,
+      }]);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col">
-      <Header 
-        isConfigOpen={isConfigOpen}
-        onToggleConfig={() => setIsConfigOpen(!isConfigOpen)}
-      />
-      
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black flex flex-col text-white">
+      <Header isConfigOpen={isConfigOpen} onToggleConfig={() => setIsConfigOpen(!isConfigOpen)} />
       <div className="flex flex-1 overflow-hidden">
         <ConfigPanel
           isOpen={isConfigOpen}
           topology={topology}
           onTopologyChange={setTopology}
-          models={models}
-          onModelsChange={setModels}
+          availableModels={availableModels}
+          modelSlots={modelSlots}
+          onModelSlotsChange={setModelSlots}
         />
-        
         <ChatInterface
           messages={messages}
           onSendMessage={handleSendMessage}
           topology={topology}
-          activeModels={models.filter((m) => m.enabled).length}
+          activeModels={modelSlots.filter(s => s.enabled).length}
         />
       </div>
     </div>

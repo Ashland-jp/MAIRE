@@ -1,4 +1,3 @@
-// main.go
 package main
 
 import (
@@ -56,8 +55,9 @@ func (p *PacketHeader) Add(dir string, idx int, model, body string) {
 		Model     string
 		Hash      string
 		Time      string
-	}{Direction: dir, Index: idx, Model: model, Hash: hash, Time: time.Now().Format(time.RFC3339)})
+	}{dir, idx, model, hash, time.Now().Format(time.RFC3339)})
 }
+
 func (p *PacketHeader) Build() string {
 	var b strings.Builder
 	b.WriteString("<LEDGER>\nOriginal: " + p.OriginalPrompt + "\n\n")
@@ -68,70 +68,44 @@ func (p *PacketHeader) Build() string {
 	return b.String()
 }
 
-// ── Real LLM Calls (OpenRouter, Hugging Face, Google Gemini) ─────
+// ── Real LLM Calls (Safe, Never Panic) ────────
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-type LLMRequest struct {
-	Model     string    `json:"model"`
-	Messages  []Message `json:"messages"`
-	MaxTokens int       `json:"max_tokens,omitempty"`
-}
-
-type LLMResponse struct {
-	Choices []struct {
-		Message Message `json:"message"`
-	} `json:"choices"`
-	Candidates []struct {
-		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
-		} `json:"content"`
-	} `json:"candidates"`
-}
-
 func Call(model, prompt string) string {
-	// Super-safe version — will never crash the server
 	openrouterKey := os.Getenv("OPENROUTER_API_KEY")
 	hfKey := os.Getenv("HF_API_KEY")
 	googleKey := os.Getenv("GOOGLE_API_KEY")
 
-	if openrouterKey == "" && hfKey == "" && googleKey == "" {
-		return CallStub(model, prompt)
-	}
-
-	// Default to stub if model not recognized
+	// Fallback stub
 	resp := CallStub(model, prompt)
 
-	// Try OpenRouter first (grok/llama)
-	if (strings.Contains(strings.ToLower(model), "grok") || strings.Contains(strings.ToLower(model), "llama")) && openrouterKey != "" {
+	// 1. Grok → OpenRouter (Llama 3.1)
+	if strings.Contains(strings.ToLower(model), "grok") && openrouterKey != "" {
 		if text, ok := callOpenRouter(prompt, openrouterKey); ok {
 			return text
 		}
 	}
 
-	// Try Hugging Face (claude/mistral)
-	if strings.Contains(strings.ToLower(model), "claude") || strings.Contains(strings.ToLower(model), "mistral") {
-	if text, ok := callHuggingFace(prompt, hfKey); ok {
-		return text
-	}
-}
-
-	// Try Gemini (gpt/gemini)
+	// 2. GPT-4 label → Google Gemini 1.5 Flash
 	if strings.Contains(strings.ToLower(model), "gpt") && googleKey != "" {
 		if text, ok := callGemini(prompt, googleKey); ok {
 			return text
 		}
 	}
 
-	return resp // fallback
+	// 3. Claude label → Hugging Face Mixtral
+	if strings.Contains(strings.ToLower(model), "claude") && hfKey != "" {
+		if text, ok := callHuggingFace(prompt, hfKey); ok {
+			return text
+		}
+	}
+
+	return resp
 }
 
-// Helper functions — these never panic
-// ── Safe LLM helpers (never panic, always return) ─────────────────────
 func callOpenRouter(prompt, key string) (string, bool) {
 	body := map[string]any{
 		"model": "meta-llama/llama-3.1-8b-instruct",
@@ -143,8 +117,7 @@ func callOpenRouter(prompt, key string) (string, bool) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("HTTP-Referer", "http://localhost:5173")
 	req.Header.Set("X-Title", "MAIRE")
-
-	client := &http.Client{Timeout: 45 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil || resp == nil || resp.StatusCode != 200 {
 		return "", false
@@ -165,34 +138,27 @@ func callOpenRouter(prompt, key string) (string, bool) {
 }
 
 func callHuggingFace(prompt, key string) (string, bool) {
-	// This model is free, instantly available, and works perfectly in 2025
 	url := "https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1"
-
 	payload := map[string]any{
 		"inputs": prompt,
 		"parameters": map[string]any{
-			"max_new_tokens": 512,
+			"max_new_tokens": 1024,
 			"return_full_text": false,
 		},
 	}
-
 	jsonBody, _ := json.Marshal(payload)
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 90 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil || resp == nil {
 		return "", false
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != 200 {
-		// HF often returns 503 when model is loading — we just fall back gracefully
 		return "", false
 	}
-
 	body, _ := io.ReadAll(resp.Body)
 	var result []struct {
 		GeneratedText string `json:"generated_text"`
@@ -211,10 +177,9 @@ func callGemini(prompt, key string) (string, bool) {
 	url := "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + key
 	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 45 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
-	if err != nil || resp == nil || resp.StatusCode != 200 {
+	if err != nil || resp == nil {
 		return "", false
 	}
 	defer resp.Body.Close()
@@ -234,9 +199,8 @@ func callGemini(prompt, key string) (string, bool) {
 	return "", false
 }
 
-
 func CallStub(model, prompt string) string {
-	time.Sleep(180 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	short := prompt
 	if len(short) > 120 {
 		short = short[:120] + "…"
@@ -267,7 +231,7 @@ func doubleHelix(prompt string, models []string) (string, []Layer) {
 	go func() {
 		defer wg.Done()
 		for i, m := range models {
-			p := l.Build() + "\n\n[Forward pass] You are " + m
+			p := l.Build() + "\n\n[Forward] You are " + m
 			resp := Call(m, p)
 			mu.Lock()
 			l.Add("F", i, m, resp)
@@ -280,7 +244,7 @@ func doubleHelix(prompt string, models []string) (string, []Layer) {
 		defer wg.Done()
 		for i := len(models) - 1; i >= 0; i-- {
 			m := models[i]
-			p := l.Build() + "\n\n[Reverse pass] Critique as " + m
+			p := l.Build() + "\n\n[Reverse] Critique as " + m
 			resp := Call(m, p)
 			mu.Lock()
 			l.Add("R", i, m, resp)
@@ -303,14 +267,14 @@ func starTopology(prompt string, models []string) (string, []Layer) {
 		wg.Add(1)
 		go func(idx int, model string) {
 			defer wg.Done()
-			l := &PacketHeader{OriginalPrompt: prompt}
+			l := &PacketHeader{OriginalPrompt: prompt} // Private ledger per arm
 			for s := 0; s < steps; s++ {
-				p := l.Build() + fmt.Sprintf("\n\nStar arm %d — step %d — You are %s", idx+1, s+1, model)
+				p := fmt.Sprintf("<LEDGER>\nOriginal: %s\n</LEDGER>\n\nYou are %s in an independent star arm. Respond directly to the original prompt only.", prompt, model)
 				resp := Call(model, p)
 				l.Add("S", s, model, resp)
 				mu.Lock()
 				stack = append(stack, Layer{
-					Model:    fmt.Sprintf("%s (arm %d • step %d)", model, idx+1, s+1),
+					Model:    fmt.Sprintf("Model %d", idx+1),
 					Response: resp,
 				})
 				mu.Unlock()
@@ -318,10 +282,10 @@ func starTopology(prompt string, models []string) (string, []Layer) {
 		}(i, m)
 	}
 	wg.Wait()
-	return fmt.Sprintf("Star Topology — %d independent chains", len(models)), stack
+	return fmt.Sprintf("Star Topology — %d arms × %d steps", len(models), steps), stack
 }
 
-// ── HTTP Handler ─────────────────────────────────
+// ── HTTP Handlers ──────────────────────────────
 func handler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -353,13 +317,35 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp{FinalResponse: final, HeaderStack: stack})
 }
 
+// Dynamic model list endpoint
+func modelsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+	available := []map[string]string{}
+	if os.Getenv("OPENROUTER_API_KEY") != "" {
+		available = append(available, map[string]string{"id": "grok", "name": "Grok (Llama 3.1 via OpenRouter)"})
+	}
+	if os.Getenv("HF_API_KEY") != "" {
+		available = append(available, map[string]string{"id": "claude", "name": "Claude (Mixtral via Hugging Face)"})
+	}
+	if os.Getenv("GOOGLE_API_KEY") != "" {
+		available = append(available, map[string]string{"id": "gpt-4", "name": "GPT-4 (Gemini 1.5 Flash)"})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(available)
+}
+
 // ── Server ───────────────────────────────────────
 func main() {
 	http.HandleFunc("/maire/run", handler)
+	http.HandleFunc("/maire/models", modelsHandler)
+
 	fmt.Println("")
 	fmt.Println("MAIRE backend LIVE")
 	fmt.Println("→ http://localhost:8080/maire/run")
-	fmt.Println("Free LLMs ready: OpenRouter (grok), Hugging Face (claude), Gemini (gpt)")
+	fmt.Println("→ http://localhost:8080/maire/models")
 	fmt.Println("")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
