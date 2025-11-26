@@ -1,235 +1,147 @@
-import { Topology, LLMModel } from '../App';
-import { GripVertical, Network, Workflow, Star, Database } from 'lucide-react';
-import { Label } from './ui/label';
+// src/components/ConfigPanel.tsx
+import type { Topology, AvailableModel, ModelSlot } from '../App';
+import { GripVertical, Workflow, Network, Star } from 'lucide-react';
 import { Switch } from './ui/switch';
-import { useEffect, useState } from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 interface ConfigPanelProps {
   isOpen: boolean;
   topology: Topology;
-  onTopologyChange: (topology: Topology) => void;
-  models: LLMModel[];
-  onModelsChange: (models: LLMModel[]) => void;
+  onTopologyChange: (t: Topology) => void;
+  availableModels: AvailableModel[];
+  modelSlots: ModelSlot[];
+  onModelSlotsChange: (slots: ModelSlot[]) => void;
 }
 
 export function ConfigPanel({
   isOpen,
   topology,
   onTopologyChange,
-  models,
-  onModelsChange,
+  availableModels,
+  modelSlots,
+  onModelSlotsChange,
 }: ConfigPanelProps) {
-  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  if (!isOpen) return null;
 
-  // Fetch available models from API on mount
-  useEffect(() => {
-    const fetchAvailableModels = async () => {
-      setIsLoadingModels(true);
-      try {
-        const response = await fetch('/maire/models');
-        if (response.ok) {
-          const data = await response.json();
-          // Expect format: [{ id: string, name: string }]
-          if (Array.isArray(data)) {
-            const formattedModels = data.map((m: any) => ({
-              id: m.id,
-              name: m.name,
-              enabled: true, // Enable all by default
-            }));
-            onModelsChange(formattedModels);
-          }
-        } else {
-          console.error('Failed to fetch models:', response.statusText);
-          // Keep existing models if API fails
-        }
-      } catch (error) {
-        console.error('Error fetching models:', error);
-        // Keep existing models if API is not available
-      } finally {
-        setIsLoadingModels(false);
-      }
-    };
-
-    fetchAvailableModels();
-  }, []);
-
-  const handleToggleModel = (id: string) => {
-    onModelsChange(
-      models.map((m) => (m.id === id ? { ...m, enabled: !m.enabled } : m))
+  const handleToggleSlot = (id: string) => {
+    onModelSlotsChange(
+      modelSlots.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
     );
   };
 
-  const handleReorderModel = (fromIndex: number, toIndex: number) => {
-    const newModels = [...models];
-    const [removed] = newModels.splice(fromIndex, 1);
-    newModels.splice(toIndex, 0, removed);
-    onModelsChange(newModels);
+  const handleSelectModel = (id: string, modelId: string) => {
+    onModelSlotsChange(
+      modelSlots.map((s) => (s.id === id ? { ...s, selectedModelId: modelId } : s))
+    );
   };
 
-  if (!isOpen) return null;
+  const handleReorder = (dragIndex: number, dropIndex: number) => {
+    const newSlots = [...modelSlots];
+    const [moved] = newSlots.splice(dragIndex, 1);
+    newSlots.splice(dropIndex, 0, moved);
+    onModelSlotsChange(newSlots);
+  };
 
-  const topologyOptions = [
-    {
-      value: 'standard-chain' as Topology,
-      label: 'Standard Chain',
-      icon: Workflow,
-      description: 'Sequential processing',
-      version: 'v1.0',
-    },
-    {
-      value: 'double-helix' as Topology,
-      label: 'Double Helix',
-      icon: Network,
-      description: 'Forward + Reverse passes',
-      badge: 'v2.0',
-    },
-    {
-      value: 'star-topology' as Topology,
-      label: 'Star Topology',
-      icon: Star,
-      description: 'Parallel reasoning arms',
-      badge: 'v3.0',
-    },
+  const topologies = [
+    { value: 'standard-chain' as const, label: 'Standard Chain', icon: Workflow },
+    { value: 'double-helix' as const, label: 'Double Helix', icon: Network },
+    { value: 'star-topology' as const, label: 'Star Topology', icon: Star, badge: 'v3' },
   ];
 
   return (
-    <aside className="w-80 border-r-2 border-[#FF6B35]/30 bg-black overflow-y-auto">
-      {/* Grid pattern overlay */}
-      <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
-        backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 1px, #FF6B35 1px, #FF6B35 2px),
-                         repeating-linear-gradient(90deg, transparent, transparent 1px, #FF6B35 1px, #FF6B35 2px)`,
-        backgroundSize: '20px 20px'
-      }} />
-      
-      <div className="relative p-6 space-y-6">
-        {/* Section header */}
-        <div className="border-l-2 border-[#FF6B35] pl-3">
-          <div className="text-[10px] text-gray-600 uppercase tracking-widest mb-1">Configuration Panel</div>
-          <div className="text-xs text-[#FF6B35]">SYSTEM PARAMETERS</div>
-        </div>
+    <aside className="w-96 border-r border-gray-800 bg-gray-950/95 backdrop-blur-xl overflow-y-auto">
+      <div className="p-8 space-y-12">
 
-        {/* Topology Selection */}
-        <div className="space-y-3">
-          <div className="border-b border-[#FF6B35]/20 pb-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-white text-xs uppercase tracking-wider">Reasoning Topology</h3>
-              <div className="text-[9px] text-gray-600 uppercase tracking-wider">Mode Select</div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            {topologyOptions.map((option) => {
-              const Icon = option.icon;
-              const isSelected = topology === option.value;
-
+        {/* Topology Selector */}
+        <section>
+          <h2 className="text-2xl font-black text-white mb-6 tracking-tight">Topology</h2>
+          <div className="space-y-3">
+            {topologies.map((t) => {
+              const Icon = t.icon;
+              const active = topology === t.value;
               return (
                 <button
-                  key={option.value}
-                  onClick={() => onTopologyChange(option.value)}
-                  className={`w-full p-3 border transition-all ${
-                    isSelected
-                      ? 'bg-[#FF6B35]/10 border-[#FF6B35]'
-                      : 'bg-black border-[#FF6B35]/20 hover:border-[#FF6B35]/40'
+                  key={t.value}
+                  onClick={() => onTopologyChange(t.value)}
+                  className={`w-full p-5 rounded-xl border-2 text-left transition-all ${
+                    active
+                      ? 'border-orange-500 bg-orange-500/10 shadow-lg shadow-orange-500/20'
+                      : 'border-gray-700 hover:border-gray-600'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
-                    <Icon className={`size-4 mt-0.5 ${isSelected ? 'text-[#FF6B35]' : 'text-gray-600'}`} />
-                    <div className="flex-1 text-left">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`text-xs uppercase tracking-wider ${isSelected ? 'text-white' : 'text-gray-400'}`}>
-                          {option.label}
-                        </span>
-                        <span className="text-[9px] px-1.5 py-0.5 border border-[#FF6B35]/30 text-[#FF6B35]">
-                          {option.badge || option.version}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-gray-600 uppercase tracking-wide">{option.description}</p>
+                  <div className="flex items-center gap-4">
+                    <Icon className={`w-6 h-6 ${active ? 'text-orange-400' : 'text-gray-500'}`} />
+                    <div>
+                      <div className="font-bold text-white">{t.label}</div>
+                      {t.badge && <span className="text-xs text-orange-400">← {t.badge}</span>}
                     </div>
                   </div>
                 </button>
               );
             })}
           </div>
-        </div>
+        </section>
 
-        {/* LLM Configuration */}
-        <div className="space-y-3">
-          <div className="border-b border-[#FF6B35]/20 pb-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-white text-xs uppercase tracking-wider">LLM Configuration</h3>
-              <div className="text-[9px] text-gray-600 uppercase tracking-wider">
-                <Database className="size-3 inline mr-1" />
-                {models.filter((m) => m.enabled).length} / {models.length} Active
-              </div>
-            </div>
-          </div>
+        {/* Model Slots */}
+        <section>
+          <h2 className="text-2xl font-black text-white mb-6 tracking-tight">
+            Model Assignment
+          </h2>
+          <div className="space-y-5">
+            {modelSlots.map((slot, index) => (
+              <div
+                key={slot.id}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData('index', index.toString())}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = Number(e.dataTransfer.getData('index'));
+                  if (from !== index) handleReorder(from, index);
+                }}
+                className="bg-gray-900/70 border border-gray-700 rounded-xl p-6 hover:border-orange-500/50 transition-all group"
+              >
+                <div className="flex items-center gap-5">
+                  <GripVertical className="w-5 h-5 text-gray-600 group-hover:text-orange-400 cursor-grab active:cursor-grabbing" />
 
-          {isLoadingModels ? (
-            <div className="p-4 border border-[#FF6B35]/20 bg-black">
-              <div className="text-xs text-gray-600 uppercase tracking-wide">Loading models...</div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {models.map((model, index) => (
-                <div
-                  key={model.id}
-                  className="group p-3 border border-[#FF6B35]/20 bg-black hover:border-[#FF6B35]/40 transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <button
-                      className="cursor-grab active:cursor-grabbing text-gray-700 hover:text-[#FF6B35]"
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/plain', index.toString());
-                      }}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = 'move';
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
-                        handleReorderModel(fromIndex, index);
-                      }}
-                    >
-                      <GripVertical className="size-4" />
-                    </button>
-
-                    <div className="flex-1 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-1.5 h-1.5 ${model.enabled ? 'bg-[#FF6B35]' : 'bg-gray-700'}`} style={{ clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' }} />
-                        <div>
-                          <Label htmlFor={`model-${model.id}`} className="text-white text-xs uppercase tracking-wider cursor-pointer">
-                            {model.name}
-                          </Label>
-                          <p className="text-[9px] text-gray-600 uppercase tracking-wider">Slot {index + 1}</p>
-                        </div>
-                      </div>
-
-                      <Switch
-                        id={`model-${model.id}`}
-                        checked={model.enabled}
-                        onCheckedChange={() => handleToggleModel(model.id)}
-                      />
-                    </div>
+                  <div className="flex-1">
+                    <h3 className="text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-orange-600">
+                      Model {index + 1}
+                    </h3>
+                    <p className="text-xs text-gray-500">Drag to reorder</p>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
-        {/* Info Panel */}
-        <div className="p-3 bg-black border-2 border-[#FF6B35]/20">
-          <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#FF6B35]/20">
-            <div className="w-1 h-1 bg-[#FF6B35]" />
-            <h4 className="text-[#FF6B35] text-[10px] uppercase tracking-widest">Core Philosophy</h4>
+                  <Select
+                    value={slot.selectedModelId}
+                    onValueChange={(value: string) => handleSelectModel(slot.id, value)}
+                  >
+                    <SelectTrigger className="w-64 bg-gray-800 border-gray-600 text-gray-100">
+                      <SelectValue>
+                        {availableModels.find((m) => m.id === slot.selectedModelId)?.name || 'Choose model'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableModels.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Switch
+                    checked={slot.enabled}
+                    onCheckedChange={() => handleToggleSlot(slot.id)}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-          <p className="text-[10px] text-gray-500 leading-relaxed uppercase tracking-wide">
-            Immutable Audit Trail • Full Context Preservation • Zero Compression • Truth Over Speed
-          </p>
-        </div>
+        </section>
+
+        <footer className="text-center text-xs text-gray-500 pt-8 border-t border-gray-800">
+          Immutable provenance • Full ledger • Truth over speed
+        </footer>
       </div>
     </aside>
   );

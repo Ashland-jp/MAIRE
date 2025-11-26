@@ -1,6 +1,7 @@
 import { Send } from 'lucide-react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
+import type { Topology, AvailableModel, ModelSlot, Message } from '../App';
 
 interface ChatInputProps {
   value: string;

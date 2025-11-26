@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { Message, Topology } from '../App';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { Network } from 'lucide-react';
+
+import type { Topology, AvailableModel, ModelSlot, Message } from '../App';
 
 interface ChatInterfaceProps {
   messages: Message[];

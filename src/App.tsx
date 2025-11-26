@@ -1,8 +1,23 @@
-import { useState } from 'react';
+// src/App.tsx
+import { useState, useEffect } from "react";
 import { ChatInterface } from './components/ChatInterface';
 import { ConfigPanel } from './components/ConfigPanel';
 import { Header } from './components/Header';
-import type { Topology, LLMModel } from './components/ConfigPanel';
+
+// ── EXPORTED TYPES (this is the fix) ─────────────────────────────────────
+export type Topology = 'standard-chain' | 'double-helix' | 'star-topology';
+
+export interface AvailableModel {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface ModelSlot {
+  id: string;
+  selectedModelId: string;
+  enabled: boolean;
+}
 
 export interface Message {
   id: string;
@@ -14,94 +29,109 @@ export interface Message {
     response: string;
   }>;
 }
+// ── END OF TYPES ────────────────────────────────────────────────────────
 
 export default function App() {
-  const [topology, setTopology] = useState<Topology>('standard-chain');
-  const [models, setModels] = useState<LLMModel[]>([
-    { id: 'grok', name: 'Grok', enabled: true },
-    { id: 'claude', name: 'Claude', enabled: true },
-    { id: 'gpt-4', name: 'GPT-4', enabled: true },
-  ]);
+  const [topology, setTopology] = useState<Topology>('star-topology');
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [modelSlots, setModelSlots] = useState<ModelSlot[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConfigOpen, setIsConfigOpen] = useState(true);
 
+  // Fetch real connected models
+useEffect(() => {
+  fetch("/maire/models")
+    .then(r => r.json())
+    .then((data: { id: string; name: string }[]) => {
+      const models = data.length > 0 
+        ? data.map(m => ({ ...m, enabled: true }))  // ← force enabled = true
+        : [
+            { id: "grok",   name: "Grok (Stub)",   enabled: true },
+            { id: "claude", name: "Claude (Stub)", enabled: true },
+            { id: "gpt-4",  name: "GPT-4 (Stub)",  enabled: true },
+          ];
+      setAvailableModels(models);
+    })
+    .catch(() => {
+      setAvailableModels([
+        { id: "grok",   name: "Grok (Stub)",   enabled: true },
+        { id: "claude", name: "Claude (Stub)", enabled: true },
+        { id: "gpt-4",  name: "GPT-4 (Stub)",  enabled: true },
+      ]);
+    });
+}, []);
+  // Initialize 5 slots
+  useEffect(() => {
+    if (availableModels.length > 0 && modelSlots.length === 0) {
+      const slots = Array.from({ length: 5 }, (_, i) => ({
+        id: `slot${i + 1}`,
+        selectedModelId: availableModels[0].id,
+        enabled: i < 3,
+      }));
+      setModelSlots(slots);
+    }
+  }, [availableModels, modelSlots.length]);
+
   const handleSendMessage = async (content: string) => {
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content,
-      timestamp: new Date(),
-    };
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content, timestamp: new Date() };
+    setMessages(prev => [...prev, userMsg]);
 
-    setMessages((prev) => [...prev, userMessage]);
+    const activeModelIds = modelSlots.filter(s => s.enabled).map(s => s.selectedModelId);
 
-    // Prepare request for Go backend
-    const enabledModels = models.filter((m) => m.enabled).map((m) => m.id);
-    
     try {
-      const response = await fetch('/maire/run', {
+      const res = await fetch('/maire/run', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           original_prompt: content,
           topology,
-          models: enabledModels,
+          models: activeModelIds,
         }),
       });
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      const assistantMessage: Message = {
+      const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.final_response || 'Response from MAIRE',
+        content: data.final_response || 'MAIRE complete',
         timestamp: new Date(),
         headerStack: data.header_stack,
       };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('Error calling MAIRE backend:', error);
-      
-      // Show error message to user
-      const errorMessage: Message = {
+      setMessages(prev => [...prev, assistantMsg]);
+    } catch (e) {
+      console.error(e);
+      // mock fallback
+      const mockStack = activeModelIds.map(id => ({
+        model: `Model ${modelSlots.findIndex(s => s.selectedModelId === id) + 1}`,
+        response: `[${id}] ${content.slice(0, 80)}…`
+      }));
+      setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Error: Unable to connect to MAIRE backend. Make sure the Go server is running on port 8080.\n\nError details: ${error}`,
+        content: 'Running in mock mode',
         timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, errorMessage]);
+        headerStack: mockStack,
+      }]);
     }
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
-      <Header 
-        isConfigOpen={isConfigOpen}
-        onToggleConfig={() => setIsConfigOpen(!isConfigOpen)}
-      />
-      
+    <div className="min-h-screen bg-black text-white flex flex-col">
+      <Header isConfigOpen={isConfigOpen} onToggleConfig={() => setIsConfigOpen(!isConfigOpen)} />
       <div className="flex flex-1 overflow-hidden">
         <ConfigPanel
           isOpen={isConfigOpen}
           topology={topology}
           onTopologyChange={setTopology}
-          models={models}
-          onModelsChange={setModels}
+          availableModels={availableModels}
+          modelSlots={modelSlots}
+          onModelSlotsChange={setModelSlots}
         />
-        
         <ChatInterface
           messages={messages}
           onSendMessage={handleSendMessage}
           topology={topology}
-          activeModels={models.filter((m) => m.enabled).length}
+          activeModels={modelSlots.filter(s => s.enabled).length}
         />
       </div>
     </div>

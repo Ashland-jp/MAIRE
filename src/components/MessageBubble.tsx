@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Message } from '../App';
 import { ChevronDown, ChevronUp, Layers, Lock } from 'lucide-react';
+import type { Topology, AvailableModel, ModelSlot } from '../App';
 
 interface MessageBubbleProps {
   message: Message;

@@ -1,6 +1,8 @@
 import { Settings, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 
+import type { Topology, AvailableModel, ModelSlot, Message } from '../App';
+
 interface HeaderProps {
   isConfigOpen: boolean;
   onToggleConfig: () => void;
@@ -21,10 +23,10 @@ export function Header({ isConfigOpen, onToggleConfig }: HeaderProps) {
         <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#FF6B35]/20">
           <div className="flex items-center gap-3">
             <div className="px-2 py-0.5 bg-[#FF6B35] text-black text-[10px] tracking-widest uppercase">
-              AI-OPS
+              ASHLAND-JP
             </div>
             <span className="text-[10px] text-gray-500 tracking-wider uppercase">
-              EXPERIMENTAL LABORATORY
+              SKUNKWORKS
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -54,11 +56,11 @@ export function Header({ isConfigOpen, onToggleConfig }: HeaderProps) {
             <div className="flex items-center gap-3 pl-6 border-l border-[#FF6B35]/20">
               <div className="text-[10px]">
                 <div className="text-gray-600 uppercase tracking-wider">Protocol</div>
-                <div className="text-[#FF6B35]">MAIRE-CORE</div>
+                <div className="text-[#FF6B35]">MAIRE_v.05</div>
               </div>
               <div className="text-[10px]">
                 <div className="text-gray-600 uppercase tracking-wider">Status</div>
-                <div className="text-green-500">ACTIVE</div>
+                <div className="text-green-500">TESTING</div>
               </div>
             </div>
           </div>
