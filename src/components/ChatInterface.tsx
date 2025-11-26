@@ -42,26 +42,35 @@ export function ChatInterface({
   };
 
   return (
-    <main className="flex-1 flex flex-col relative">
-      <div className="absolute inset-0 bg-gradient-to-br from-gray-900/50 via-transparent to-gray-900/50 pointer-events-none" />
+    <main className="flex-1 flex flex-col relative bg-[#0a0a0a]">
+      {/* Grid pattern overlay */}
+      <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
+        backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 1px, #FF6B35 1px, #FF6B35 2px),
+                         repeating-linear-gradient(90deg, transparent, transparent 1px, #FF6B35 1px, #FF6B35 2px)`,
+        backgroundSize: '20px 20px'
+      }} />
       
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-6 py-8 relative">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
-            <div className="text-center space-y-4 max-w-md">
-              <div className="inline-flex p-4 rounded-2xl bg-gray-800/40 backdrop-blur-sm border border-gray-700/50">
-                <Network className="size-12 text-gray-400" />
+            <div className="text-center space-y-6 max-w-md">
+              <div className="inline-flex p-6 bg-black border-2 border-[#FF6B35]/20">
+                <Network className="size-16 text-[#FF6B35]" />
               </div>
               <div>
-                <h2 className="text-gray-100 mb-2">Welcome to MAIRE</h2>
-                <p className="text-gray-400 text-sm leading-relaxed">
+                <h2 className="text-white mb-2 tracking-wider">WELCOME TO MAIRE</h2>
+                <p className="text-gray-500 text-xs uppercase tracking-wide mb-4">
                   Multi-Anchor Immutable Reasoning Engine
                 </p>
-                <p className="text-gray-500 text-xs mt-4">
-                  Using <span className="text-gray-300">{topologyLabels[topology]}</span> with{' '}
-                  <span className="text-gray-300">{activeModels} models</span>
-                </p>
+                <div className="p-3 bg-black border border-[#FF6B35]/20">
+                  <p className="text-[10px] text-gray-600 uppercase tracking-wider">
+                    Active Configuration
+                  </p>
+                  <p className="text-xs text-[#FF6B35] mt-1 uppercase tracking-wider">
+                    {topologyLabels[topology]} • {activeModels} Models
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -76,9 +85,7 @@ export function ChatInterface({
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-700/50 backdrop-blur-xl bg-gray-900/60 relative">
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-800/20 to-transparent pointer-events-none" />
-        
+      <div className="border-t-2 border-[#FF6B35]/30 bg-black relative">
         <div className="relative px-6 py-4">
           <ChatInput
             value={input}
@@ -88,8 +95,8 @@ export function ChatInterface({
           />
           
           {activeModels === 0 && (
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              Please enable at least one LLM model to continue
+            <p className="text-[10px] text-gray-600 mt-2 text-center uppercase tracking-wider">
+              ⚠ Enable at least one LLM model to continue
             </p>
           )}
         </div>

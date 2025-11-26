@@ -1,42 +1,87 @@
-import { Message } from '../App';  // ← THIS WAS MISSING
+import { useState } from 'react';
+import { Message } from '../App';
+import { ChevronDown, ChevronUp, Layers, Lock } from 'lucide-react';
 
-export function MessageBubble({ message }: { message: Message }) {
-  if (message.role === 'user') {
-    return (
-      <div className="max-w-2xl mx-auto my-8">
-        <div className="bg-cyan-600/20 border border-cyan-500/30 rounded-2xl p-6">
-          <p className="text-cyan-100">{message.content}</p>
-        </div>
-      </div>
-    );
-  }
+interface MessageBubbleProps {
+  message: Message;
+}
+
+export function MessageBubble({ message }: MessageBubbleProps) {
+  const [isStackExpanded, setIsStackExpanded] = useState(false);
+
+  const isUser = message.role === 'user';
 
   return (
-    <div className="max-w-4xl mx-auto my-12">
-      {/* Final answer */}
-      <div className="bg-gradient-to-r from-purple-900/40 to-pink-900/40 border border-purple-700/50 rounded-2xl p-8 mb-8">
-        <h2 className="text-2xl font-bold text-white mb-4">MAIRE Final Response</h2>
-        <p className="text-gray-100 whitespace-pre-wrap leading-relaxed">{message.content}</p>
-      </div>
-
-      {/* Header Stack – Model 1, Model 2, etc. */}
-      {message.headerStack && message.headerStack.length > 0 && (
-        <div className="space-y-6">
-          <h3 className="text-xl font-bold text-gray-300 text-center">Full Reasoning Trace</h3>
-          {message.headerStack.map((layer, i) => (  // ← i is fine here
-            <div key={i} className="bg-gray-900/80 border border-gray-700 rounded-xl overflow-hidden">
-              <div className="bg-gradient-to-r from-cyan-900/30 to-purple-900/30 px-6 py-3 border-b border-gray-700">
-                <span className="text-lg font-bold text-cyan-300">
-                  {layer.model}
-                </span>
-              </div>
-              <div className="p-6 font-mono text-sm text-gray-200 whitespace-pre-wrap max-h-96 overflow-y-auto">
-                {layer.response}
-              </div>
-            </div>
-          ))}
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[80%] space-y-2 ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
+        {/* Main Message */}
+        <div
+          className={`px-5 py-3 border transition-all ${
+            isUser
+              ? 'bg-[#1a1a1a] border-[#FF6B35]/30 text-gray-200'
+              : 'bg-black border-[#FF6B35]/20 text-gray-300'
+          }`}
+        >
+          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
         </div>
-      )}
+
+        {/* Header Stack (only for assistant messages) */}
+        {!isUser && message.headerStack && message.headerStack.length > 0 && (
+          <div className="w-full">
+            <button
+              onClick={() => setIsStackExpanded(!isStackExpanded)}
+              className="flex items-center gap-2 px-3 py-2 bg-black border border-[#FF6B35]/20 hover:border-[#FF6B35]/40 transition-all text-gray-400 hover:text-[#FF6B35] text-xs uppercase tracking-wider"
+            >
+              <Layers className="size-3" />
+              <span>Reasoning Chain</span>
+              <span className="text-[#FF6B35]">({message.headerStack.length})</span>
+              {isStackExpanded ? (
+                <ChevronUp className="size-3 ml-auto" />
+              ) : (
+                <ChevronDown className="size-3 ml-auto" />
+              )}
+            </button>
+
+            {isStackExpanded && (
+              <div className="mt-2 space-y-2 p-3 bg-black border-2 border-[#FF6B35]/20">
+                {message.headerStack.map((layer, index) => (
+                  <div
+                    key={index}
+                    className="p-3 bg-[#0a0a0a] border border-[#FF6B35]/20"
+                  >
+                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#FF6B35]/10">
+                      <div className="w-1.5 h-1.5 bg-[#FF6B35]" style={{ clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' }} />
+                      <span className="text-[9px] text-gray-600 uppercase tracking-wider">
+                        Layer {index + 1}
+                      </span>
+                      <span className="text-[9px] px-1.5 py-0.5 border border-[#FF6B35]/30 text-[#FF6B35] uppercase tracking-wider">
+                        {layer.model}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">
+                      {layer.response}
+                    </p>
+                  </div>
+                ))}
+                
+                <div className="pt-2 border-t-2 border-[#FF6B35]/20">
+                  <div className="flex items-center gap-2">
+                    <Lock className="size-3 text-[#FF6B35]" />
+                    <p className="text-[9px] text-gray-600 uppercase tracking-wider">
+                      Immutable Audit Trail • {new Date(message.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Timestamp */}
+        <span className="text-[9px] text-gray-700 px-2 uppercase tracking-wider">
+          {new Date(message.timestamp).toLocaleTimeString()}
+        </span>
+      </div>
     </div>
   );
 }

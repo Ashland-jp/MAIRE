@@ -26,9 +26,9 @@ export function ChatInput({ value, onChange, onSend, disabled }: ChatInputProps)
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Now make 'em kith"
+          placeholder="INPUT QUERY..."
           disabled={disabled}
-          className="min-h-[60px] max-h-[200px] resize-none bg-gray-800/40 border-gray-700/50 text-gray-100 placeholder:text-gray-500 focus:border-gray-600 backdrop-blur-sm"
+          className="min-h-[60px] max-h-[200px] resize-none bg-[#1a1a1a] border-[#FF6B35]/30 text-gray-300 placeholder:text-gray-700 placeholder:uppercase placeholder:tracking-wider focus:border-[#FF6B35] focus:ring-[#FF6B35]"
           rows={2}
         />
       </div>
@@ -37,9 +37,10 @@ export function ChatInput({ value, onChange, onSend, disabled }: ChatInputProps)
         onClick={onSend}
         disabled={disabled || !value.trim()}
         size="lg"
-        className="h-[60px] px-6 bg-gray-700/60 hover:bg-gray-700/80 text-gray-100 border border-gray-600/50 backdrop-blur-sm"
+        className="h-[60px] px-6 bg-[#FF6B35] hover:bg-[#FF8C42] text-black border border-[#FF6B35]"
       >
         <Send className="size-5" />
+        <span className="ml-2 text-xs uppercase tracking-wider">Send</span>
       </Button>
     </div>
   );
