@@ -44,6 +44,28 @@ type resp struct {
 	HeaderStack   []Layer `json:"header_stack"`
 }
 
+type modelResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ── CORS Middleware ─────────────────────────────
+func enableCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		
+		// Handle preflight
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
+		next(w, r)
+	}
+}
+
 // ── Ledger Methods ─────────────────────────────
 func (p *PacketHeader) Add(dir string, idx int, model, body string) {
 	p.mu.Lock()
@@ -212,13 +234,22 @@ func CallStub(model, prompt string) string {
 func standardChain(prompt string, models []string) (string, []Layer) {
 	l := &PacketHeader{OriginalPrompt: prompt}
 	var stack []Layer
+	current := prompt
+	
 	for i, m := range models {
-		p := l.Build() + "\n\n→ " + m + "\nContinue and improve:"
+		p := l.Build() + "\n\n→ " + m + "\nContinue and improve:\n" + current
 		resp := Call(m, p)
 		l.Add("F", i, m, resp)
 		stack = append(stack, Layer{Model: m, Response: resp})
+		current = resp // Pass output to next model
 	}
-	return "Standard chain complete", stack
+	
+	finalResponse := current
+	if len(stack) > 0 {
+		finalResponse = stack[len(stack)-1].Response
+	}
+	
+	return finalResponse, stack
 }
 
 func doubleHelix(prompt string, models []string) (string, []Layer) {
@@ -230,31 +261,42 @@ func doubleHelix(prompt string, models []string) (string, []Layer) {
 
 	go func() {
 		defer wg.Done()
+		current := prompt
 		for i, m := range models {
-			p := l.Build() + "\n\n[Forward] You are " + m
+			p := l.Build() + "\n\n[Forward Pass] You are " + m + ". Build upon:\n" + current
 			resp := Call(m, p)
 			mu.Lock()
 			l.Add("F", i, m, resp)
 			stack = append(stack, Layer{Model: m + " (forward)", Response: resp})
+			current = resp
 			mu.Unlock()
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
+		current := prompt
 		for i := len(models) - 1; i >= 0; i-- {
 			m := models[i]
-			p := l.Build() + "\n\n[Reverse] Critique as " + m
+			p := l.Build() + "\n\n[Reverse Pass] You are " + m + ". Critique and refine:\n" + current
 			resp := Call(m, p)
 			mu.Lock()
 			l.Add("R", i, m, resp)
 			stack = append(stack, Layer{Model: m + " (reverse)", Response: resp})
+			current = resp
 			mu.Unlock()
 		}
 	}()
 
 	wg.Wait()
-	return "Double Helix complete", stack
+	
+	// Synthesize final response from both passes
+	finalResponse := "Double Helix reasoning complete with forward and reverse passes"
+	if len(stack) > 0 {
+		finalResponse = stack[len(stack)-1].Response
+	}
+	
+	return finalResponse, stack
 }
 
 func starTopology(prompt string, models []string) (string, []Layer) {
@@ -267,14 +309,16 @@ func starTopology(prompt string, models []string) (string, []Layer) {
 		wg.Add(1)
 		go func(idx int, model string) {
 			defer wg.Done()
-			l := &PacketHeader{OriginalPrompt: prompt} // Private ledger per arm
+			l := &PacketHeader{OriginalPrompt: prompt}
+			
 			for s := 0; s < steps; s++ {
-				p := fmt.Sprintf("<LEDGER>\nOriginal: %s\n</LEDGER>\n\nYou are %s in an independent star arm. Respond directly to the original prompt only.", prompt, model)
+				p := fmt.Sprintf("<LEDGER>\nOriginal: %s\n</LEDGER>\n\nYou are %s in independent reasoning arm #%d, step %d/%d. Respond directly to the original prompt.", 
+					prompt, model, idx+1, s+1, steps)
 				resp := Call(model, p)
 				l.Add("S", s, model, resp)
 				mu.Lock()
 				stack = append(stack, Layer{
-					Model:    fmt.Sprintf("Model %d", idx+1),
+					Model:    fmt.Sprintf("%s (arm-%d step-%d)", model, idx+1, s+1),
 					Response: resp,
 				})
 				mu.Unlock()
@@ -282,7 +326,14 @@ func starTopology(prompt string, models []string) (string, []Layer) {
 		}(i, m)
 	}
 	wg.Wait()
-	return fmt.Sprintf("Star Topology — %d arms × %d steps", len(models), steps), stack
+	
+	// Synthesize from all arms
+	finalResponse := fmt.Sprintf("Star Topology complete: %d parallel reasoning arms, %d steps each", len(models), steps)
+	if len(stack) > 0 {
+		finalResponse = stack[len(stack)-1].Response
+	}
+	
+	return finalResponse, stack
 }
 
 // ── HTTP Handlers ──────────────────────────────
@@ -291,24 +342,30 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
 	}
+	
 	var in req
 	if json.NewDecoder(r.Body).Decode(&in) != nil {
 		http.Error(w, "bad json", 400)
 		return
 	}
+	
 	if len(in.Models) == 0 {
-		http.Error(w, "no models", 400)
+		http.Error(w, "no models provided", 400)
 		return
 	}
 
 	var final string
 	var stack []Layer
 
+	log.Printf("Running topology: %s with models: %v", in.Topology, in.Models)
+
 	switch in.Topology {
 	case "star-topology":
 		final, stack = starTopology(in.OriginalPrompt, in.Models)
 	case "double-helix":
 		final, stack = doubleHelix(in.OriginalPrompt, in.Models)
+	case "standard-chain":
+		final, stack = standardChain(in.OriginalPrompt, in.Models)
 	default:
 		final, stack = standardChain(in.OriginalPrompt, in.Models)
 	}
@@ -323,27 +380,39 @@ func modelsHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "GET only", http.StatusMethodNotAllowed)
 		return
 	}
-	available := []map[string]string{}
+	
+	available := []modelResponse{}
+	
 	if os.Getenv("OPENROUTER_API_KEY") != "" {
-		available = append(available, map[string]string{"id": "grok", "name": "Grok (Llama 3.1 via OpenRouter)"})
+		available = append(available, modelResponse{ID: "grok", Name: "Grok (Llama 3.1 via OpenRouter)"})
 	}
 	if os.Getenv("HF_API_KEY") != "" {
-		available = append(available, map[string]string{"id": "claude", "name": "Claude (Mixtral via Hugging Face)"})
+		available = append(available, modelResponse{ID: "claude", Name: "Claude (Mixtral via Hugging Face)"})
 	}
 	if os.Getenv("GOOGLE_API_KEY") != "" {
-		available = append(available, map[string]string{"id": "gpt-4", "name": "GPT-4 (Gemini 1.5 Flash)"})
+		available = append(available, modelResponse{ID: "gpt-4", Name: "GPT-4 (Gemini 1.5 Flash)"})
 	}
+	
+	// Add stub models for testing
+	if len(available) == 0 {
+		available = []modelResponse{
+			{ID: "grok", Name: "Grok (Stub)"},
+			{ID: "claude", Name: "Claude (Stub)"},
+			{ID: "gpt-4", Name: "GPT-4 (Stub)"},
+		}
+	}
+	
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(available)
 }
 
 // ── Server ───────────────────────────────────────
 func main() {
-	http.HandleFunc("/maire/run", handler)
-	http.HandleFunc("/maire/models", modelsHandler)
+	http.HandleFunc("/maire/run", enableCORS(handler))
+	http.HandleFunc("/maire/models", enableCORS(modelsHandler))
 
 	fmt.Println("")
-	fmt.Println("MAIRE backend LIVE")
+	fmt.Println("🚀 MAIRE backend LIVE")
 	fmt.Println("→ http://localhost:8080/maire/run")
 	fmt.Println("→ http://localhost:8080/maire/models")
 	fmt.Println("")

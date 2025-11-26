@@ -29,18 +29,21 @@ export function ConfigPanel({
         const response = await fetch('/maire/models');
         if (response.ok) {
           const data = await response.json();
-          // Expect format: { models: [{ id: string, name: string, enabled?: boolean }] }
-          if (data.models && Array.isArray(data.models)) {
-            const formattedModels = data.models.map((m: any) => ({
-              id: m.id || m.name.toLowerCase().replace(/\s+/g, '-'),
+          // Expect format: [{ id: string, name: string }]
+          if (Array.isArray(data)) {
+            const formattedModels = data.map((m: any) => ({
+              id: m.id,
               name: m.name,
-              enabled: m.enabled !== undefined ? m.enabled : false,
+              enabled: true, // Enable all by default
             }));
             onModelsChange(formattedModels);
           }
+        } else {
+          console.error('Failed to fetch models:', response.statusText);
+          // Keep existing models if API fails
         }
       } catch (error) {
-        console.log('Using default model configuration');
+        console.error('Error fetching models:', error);
         // Keep existing models if API is not available
       } finally {
         setIsLoadingModels(false);
@@ -70,21 +73,21 @@ export function ConfigPanel({
       value: 'standard-chain' as Topology,
       label: 'Standard Chain',
       icon: Workflow,
-      description: 'Forward → Reverse pass',
+      description: 'Sequential processing',
       version: 'v1.0',
     },
     {
       value: 'double-helix' as Topology,
       label: 'Double Helix',
       icon: Network,
-      description: 'Simultaneous chains',
+      description: 'Forward + Reverse passes',
       badge: 'v2.0',
     },
     {
       value: 'star-topology' as Topology,
       label: 'Star Topology',
       icon: Star,
-      description: 'N parallel chains',
+      description: 'Parallel reasoning arms',
       badge: 'v3.0',
     },
   ];
